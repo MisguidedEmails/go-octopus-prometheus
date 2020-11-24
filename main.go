@@ -86,6 +86,10 @@ func entrypoint() int {
 
 		return 1
 	}
+	fmt.Println(
+		"Pushed elec usage to pushgateway, kWh:",
+		elecConsumption[0].Consumption,
+	)
 
 	gasConsumption, err := client.GasConsumption(
 		os.Getenv("OCTOPUS_MPRN"),
@@ -104,6 +108,8 @@ func entrypoint() int {
 
 		return 1
 	}
+
+	fmt.Println("Pushed gas usage to pushgateway, kWh:", gasConsumption[0].Consumption)
 
 	return 0
 }
