@@ -9,7 +9,22 @@ import (
 	"github.com/prometheus/client_golang/prometheus/push"
 )
 
-func pushMetrics(metric octopus.Consumption, address string, electricity bool) error {
+func pushMetrics(elec, gas prometheus.Collector, address string) error {
+	pusher := push.New(address, "octopus").Collector(elec)
+	pusher.Collector(gas)
+
+	err := pusher.Push()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func createGauge(
+	metric octopus.Consumption,
+	electricity bool,
+) prometheus.Gauge {
 	var consumptionMetric prometheus.Gauge
 	if electricity {
 		consumptionMetric = prometheus.NewGauge(
@@ -31,15 +46,7 @@ func pushMetrics(metric octopus.Consumption, address string, electricity bool) e
 
 	consumptionMetric.Set(float64(metric.Consumption))
 
-	err := push.New(address, "octopus").
-		Collector(consumptionMetric).
-		Push()
-
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return consumptionMetric
 }
 
 func entrypoint() int {
@@ -80,16 +87,7 @@ func entrypoint() int {
 		return 1
 	}
 
-	err = pushMetrics(elecConsumption[0], os.Getenv("OCTOPUS_PUSHGATEWAY"), true)
-	if err != nil {
-		fmt.Println(err)
-
-		return 1
-	}
-	fmt.Println(
-		"Pushed elec usage to pushgateway, kWh:",
-		elecConsumption[0].Consumption,
-	)
+	elecGauge := createGauge(elecConsumption[0], true)
 
 	gasConsumption, err := client.GasConsumption(
 		os.Getenv("OCTOPUS_MPRN"),
@@ -102,7 +100,13 @@ func entrypoint() int {
 		return 1
 	}
 
-	err = pushMetrics(gasConsumption[0], os.Getenv("OCTOPUS_PUSHGATEWAY"), false)
+	gasGauge := createGauge(gasConsumption[0], false)
+
+	err = pushMetrics(
+		gasGauge,
+		elecGauge,
+		os.Getenv("OCTOPUS_PUSHGATEWAY"),
+	)
 	if err != nil {
 		fmt.Println(err)
 
@@ -110,6 +114,10 @@ func entrypoint() int {
 	}
 
 	fmt.Println("Pushed gas usage to pushgateway, kWh:", gasConsumption[0].Consumption)
+	fmt.Println(
+		"Pushed elec usage to pushgateway, kWh:",
+		elecConsumption[0].Consumption,
+	)
 
 	return 0
 }
