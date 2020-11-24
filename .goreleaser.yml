@@ -1,0 +1,14 @@
+project_name: octopus-prometheus
+
+builds:
+- id: octopus-prometheus
+  goos:
+  - linux
+  goarch:
+  - amd64
+
+dockers:
+- image_templates:
+  - "{{.Env.IMAGE_ID}}:latest"
+  - "{{.Env.IMAGE_ID}}:{{.RawVersion}}"
+  - "{{.Env.IMAGE_ID}}:{{.Major}}.{{.Minor}}"
