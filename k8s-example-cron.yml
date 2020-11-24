@@ -1,0 +1,37 @@
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+  name: octopus
+spec:
+  # Run on 1 and 31 minutes passed
+  schedule: "31,1 * * * *"
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: octopus
+              image: ghcr.io/misguidedemails/octopus-prometheus:0.1
+              imagePullPolicy: Always
+              env:
+              - name: OCTOPUS_TOKEN
+                valueFrom:
+                  secretKeyRef:
+                    name: octopus
+                    key: octopus
+              envFrom:
+              - configMapRef:
+                  name: octopus
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: octopus
+data:
+  OCTOPUS_MPAN: "ELEC MPAN"
+  OCTOPUS_ELEC_SERIAL: "ELEC SERIAL"
+  OCTOPUS_MPRN: "GAS MPRN"
+  OCTOPUS_GAS_SERIAL: "GAS SERIAL"
+  OCTOPUS_PUSHGATEWAY: "pushgateway-prometheus-pushgateway.monitoring:9091"
