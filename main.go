@@ -43,47 +43,62 @@ func pushMetrics(metric octopus.Consumption, address string, electricity bool) e
 }
 
 func entrypoint() int {
-	token := os.Getenv("OCTOPUS_TOKEN")
-	mpan := os.Getenv("OCTOPUS_MPAN")
-	mprn := os.Getenv("OCTOPUS_MPRN")
-	elecSerial := os.Getenv("OCTOPUS_ELEC_SERIAL")
-	gasSerial := os.Getenv("OCTOPUS_GAS_SERIAL")
-	pushgateway := os.Getenv("PUSHGATEWAY_ADDRESS")
+	requiredVars := []string{
+		"TOKEN", "MPAN", "MPRN", "ELEC_SERIAL", "GAS_SERIAL", "PUSHGATEWAY",
+	}
 
-	if token == "" || mpan == "" || elecSerial == "" || pushgateway == "" {
-		fmt.Println("TOKEN, MPAN, PUSHGATEWAY_ADDRESS, or ELEC_SERIAL not given")
+	var missingVars []string
+
+	for _, env := range requiredVars {
+		varName := fmt.Sprintf("OCTOPUS_%s", env)
+
+		if value := os.Getenv(varName); value == "" {
+			missingVars = append(missingVars, varName)
+		}
+	}
+
+	if len(missingVars) > 0 {
+		fmt.Println("Missing ENV vars:", missingVars)
 
 		return 1
 	}
 
-	client := octopus.NewClient(token)
+	client := octopus.NewClient(os.Getenv("OCTOPUS_TOKEN"))
 
 	options := octopus.ConsumptionRequest{
 		PageSize: 1,
 	}
 
-	elecConsumption, err := client.ElectricityConsumption(mpan, elecSerial, options)
+	elecConsumption, err := client.ElectricityConsumption(
+		os.Getenv("OCTOPUS_MPAN"),
+		os.Getenv("OCTOPUS_ELEC_SERIAL"),
+		options,
+	)
 	if err != nil {
 		fmt.Println(err)
 
 		return 1
 	}
 
-	err = pushMetrics(elecConsumption[0], pushgateway, true)
+	err = pushMetrics(elecConsumption[0], os.Getenv("OCTOPUS_PUSHGATEWAY"), true)
 	if err != nil {
 		fmt.Println(err)
 
 		return 1
 	}
 
-	gasConsumption, err := client.GasConsumption(mprn, gasSerial, options)
+	gasConsumption, err := client.GasConsumption(
+		os.Getenv("OCTOPUS_MPRN"),
+		os.Getenv("OCTOPUS_GAS_SERIAL"),
+		options,
+	)
 	if err != nil {
 		fmt.Println(err)
 
 		return 1
 	}
 
-	err = pushMetrics(gasConsumption[0], pushgateway, false)
+	err = pushMetrics(gasConsumption[0], os.Getenv("OCTOPUS_PUSHGATEWAY"), false)
 	if err != nil {
 		fmt.Println(err)
 
