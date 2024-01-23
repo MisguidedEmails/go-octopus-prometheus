@@ -87,6 +87,12 @@ func entrypoint() int {
 		return 1
 	}
 
+	if len(elecConsumption) == 0 {
+		fmt.Println("No electricity consumption found")
+
+		return 1
+	}
+
 	elecGauge := createGauge(elecConsumption[0], true)
 
 	gasConsumption, err := client.GasConsumption(
@@ -96,6 +102,12 @@ func entrypoint() int {
 	)
 	if err != nil {
 		fmt.Println(err)
+
+		return 1
+	}
+
+	if len(gasConsumption) == 0 {
+		fmt.Println("No gas consumption found")
 
 		return 1
 	}
