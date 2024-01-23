@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
 
@@ -9,22 +10,10 @@ import (
 	"github.com/prometheus/client_golang/prometheus/push"
 )
 
-func pushMetrics(elec, gas prometheus.Collector, address string) error {
-	pusher := push.New(address, "octopus").Collector(elec)
-	pusher.Collector(gas)
-
-	err := pusher.Push()
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func createGauge(
+func pushMetrics(
 	metric octopus.Consumption,
 	electricity bool,
-) prometheus.Gauge {
+) error {
 	var consumptionMetric prometheus.Gauge
 	if electricity {
 		consumptionMetric = prometheus.NewGauge(
@@ -46,12 +35,35 @@ func createGauge(
 
 	consumptionMetric.Set(float64(metric.Consumption))
 
-	return consumptionMetric
+	pusher := push.New(os.Getenv("OCTOPUS_PUSHGATEWAY"), "octopus").Collector(consumptionMetric)
+
+	err := pusher.Push()
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
-func entrypoint() int {
-	requiredVars := []string{
-		"TOKEN", "MPAN", "MPRN", "ELEC_SERIAL", "GAS_SERIAL", "PUSHGATEWAY",
+func cli(args []string) int {
+	ingestGas := flag.Bool("gas", false, "Include gas consumption")
+	ingestElec := flag.Bool("electricity", false, "Include electricity consumption")
+	flag.Parse()
+
+	if !*ingestGas && !*ingestElec {
+		fmt.Println("No consumption type (--gas/--electricity) specified")
+
+		return 1
+	}
+
+	requiredVars := []string{"TOKEN", "PUSHGATEWAY"}
+
+	if *ingestGas {
+		requiredVars = append(requiredVars, []string{"MPRN", "GAS_SERIAL"}...)
+	}
+
+	if *ingestElec {
+		requiredVars = append(requiredVars, []string{"MPAN", "ELEC_SERIAL"}...)
 	}
 
 	var missingVars []string
@@ -76,64 +88,67 @@ func entrypoint() int {
 		PageSize: 1,
 	}
 
-	elecConsumption, err := client.ElectricityConsumption(
-		os.Getenv("OCTOPUS_MPAN"),
-		os.Getenv("OCTOPUS_ELEC_SERIAL"),
-		options,
-	)
-	if err != nil {
-		fmt.Println(err)
+	if *ingestElec {
+		elecConsumption, err := client.ElectricityConsumption(
+			os.Getenv("OCTOPUS_MPAN"),
+			os.Getenv("OCTOPUS_ELEC_SERIAL"),
+			options,
+		)
+		if err != nil {
+			fmt.Println(err)
 
-		return 1
+			return 1
+		}
+
+		if len(elecConsumption) == 0 {
+			fmt.Println("No electricity consumption found")
+
+			return 1
+		}
+
+		err = pushMetrics(elecConsumption[0], true)
+		if err != nil {
+			fmt.Printf("Error pushing electricity consumption: %v\n", err)
+
+			return 1
+		}
+
+		fmt.Println(
+			"Pushed elec usage to pushgateway, kWh:", elecConsumption[0].Consumption,
+		)
 	}
 
-	if len(elecConsumption) == 0 {
-		fmt.Println("No electricity consumption found")
+	if *ingestGas {
+		gasConsumption, err := client.GasConsumption(
+			os.Getenv("OCTOPUS_MPRN"),
+			os.Getenv("OCTOPUS_GAS_SERIAL"),
+			options,
+		)
+		if err != nil {
+			fmt.Println(err)
 
-		return 1
+			return 1
+		}
+
+		if len(gasConsumption) == 0 {
+			fmt.Println("No gas consumption found")
+
+			return 1
+		}
+
+		err = pushMetrics(gasConsumption[0], false)
+		if err != nil {
+			fmt.Printf("Error pushing gas consumption: %v\n", err)
+
+			return 1
+		}
+
+		fmt.Println("Pushed gas usage to pushgateway, kWh:", gasConsumption[0].Consumption)
 	}
-
-	elecGauge := createGauge(elecConsumption[0], true)
-
-	gasConsumption, err := client.GasConsumption(
-		os.Getenv("OCTOPUS_MPRN"),
-		os.Getenv("OCTOPUS_GAS_SERIAL"),
-		options,
-	)
-	if err != nil {
-		fmt.Println(err)
-
-		return 1
-	}
-
-	if len(gasConsumption) == 0 {
-		fmt.Println("No gas consumption found")
-
-		return 1
-	}
-
-	gasGauge := createGauge(gasConsumption[0], false)
-
-	err = pushMetrics(
-		gasGauge,
-		elecGauge,
-		os.Getenv("OCTOPUS_PUSHGATEWAY"),
-	)
-	if err != nil {
-		fmt.Println(err)
-
-		return 1
-	}
-
-	fmt.Println("Pushed gas usage to pushgateway, kWh:", gasConsumption[0].Consumption)
-	fmt.Println(
-		"Pushed elec usage to pushgateway, kWh:",
-		elecConsumption[0].Consumption,
-	)
 
 	return 0
 }
 
 func main() {
-	os.Exit(entrypoint())
+	os.Exit(cli(os.Args))
 }
