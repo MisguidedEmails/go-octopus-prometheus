@@ -3,48 +3,95 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log"
 	"os"
 
+	"github.com/golang/snappy"
+	"github.com/go-resty/resty/v2"
+	"github.com/gogo/protobuf/proto"
 	"github.com/misguidedemails/go-octopus-energy"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/push"
+	"github.com/prometheus/prometheus/prompb"
 )
 
 func pushMetrics(
-	metric octopus.Consumption,
+	metric []octopus.Consumption,
 	electricity bool,
 ) error {
-	var consumptionMetric prometheus.Gauge
+	labels := []prompb.Label{}
 	if electricity {
-		consumptionMetric = prometheus.NewGauge(
-			prometheus.GaugeOpts{
-				Namespace: "octopus",
-				Subsystem: "electricity",
-				Name:      "kilowatthours",
-			},
-		)
+		labels = append(labels, prompb.Label{
+			Name: "__name__",
+			Value: "octopus_consumption_electricity_kwh",
+		})
 	} else {
-		consumptionMetric = prometheus.NewGauge(
-			prometheus.GaugeOpts{
-				Namespace: "octopus",
-				Subsystem: "gas",
-				Name:      "kilowatthours",
-			},
-		)
+		labels = append(labels, prompb.Label{
+			Name: "__name__",
+			Value: "octopus_consumption_gas_kwh",
+		})
 	}
 
-	consumptionMetric.Set(float64(metric.Consumption))
+	log.Printf("Pushing %v metrics to pushgateway", len(metric))
 
-	pusher := push.New(os.Getenv("OCTOPUS_PUSHGATEWAY"), "octopus").Collector(consumptionMetric)
+	// We can only get consumption in 30 minute intervals, so we need to
+	// report the same value for 30 minutes. Otherwise queries in-between
+	// will return no data.
+	// Frequency determines how frequent the metrics in prometheus will be.
+	// frequency := 10 // mins
 
-	err := pusher.Push()
-	if err != nil {
-		return err
+	client := resty.New().
+		SetHeader("Content-Type", "application/x-protobuf").
+		SetHeader("X-Prometheus-Remote-Write-Version", "0.1.0").
+		SetHeader("Content-Encoding", "snappy").
+		SetHeader("User-Agent", "testing/1.1.1.")
+
+	for _, m := range metric {
+		log.Printf("Pushing metric for %v, %vkwh", m.IntervalStart, m.Consumption)
+		request := prompb.WriteRequest{
+			Timeseries: []prompb.TimeSeries{
+				{
+					Labels: labels,
+					Samples: []prompb.Sample{
+						{
+							Value: float64(m.Consumption),
+							Timestamp: m.IntervalStart.UnixMilli(),
+						},
+					},
+				},
+			},
+		}
+
+		serial, err := proto.Marshal(&request)
+		if err != nil {
+			return err
+		}
+
+		snappySerial := snappy.Encode(nil, serial)
+
+		resp, err := client.R().
+			SetBody(snappySerial).
+			Post(os.Getenv("OCTOPUS_PUSHGATEWAY"))
+		if err != nil {
+			return err
+		}
+
+		// NOTE: Prometheus has a default limit of ~2 hours for stale data, we will get an
+		// out of bounds error if we try to push data older than that.
+		// NOTE: Prometheus will reject samples that are older than what it currently has.
+		// This means that if we ingested data in the past, and want to backfill further,
+		// we will either need to delete the data, or use different labels.
+
+		// TODO: Proper error handling
+		if resp.StatusCode() != 204 {
+			return fmt.Errorf("Pushgateway returned non-204 status code: %v", resp.StatusCode())
+		}
 	}
 
 	return nil
 }
 
+// TODO: Add backfill length option - how far back to backfill
+// TODO: Add frequency option - how frequent should the data be in prometheus
+// TODO: Pagination - max 25000 results per page, which is a full year of 30-min intervals
 func cli(args []string) int {
 	ingestGas := flag.Bool("gas", false, "Include gas consumption")
 	ingestElec := flag.Bool("electricity", false, "Include electricity consumption")
@@ -85,7 +132,7 @@ func cli(args []string) int {
 	client := octopus.NewClient(os.Getenv("OCTOPUS_TOKEN"))
 
 	options := octopus.ConsumptionRequest{
-		PageSize: 1,
+		PageSize: 25000,
 	}
 
 	if *ingestElec {
@@ -106,7 +153,7 @@ func cli(args []string) int {
 			return 1
 		}
 
-		err = pushMetrics(elecConsumption[0], true)
+		err = pushMetrics(elecConsumption, true)
 		if err != nil {
 			fmt.Printf("Error pushing electricity consumption: %v\n", err)
 
@@ -136,7 +183,7 @@ func cli(args []string) int {
 			return 1
 		}
 
-		err = pushMetrics(gasConsumption[0], false)
+		err = pushMetrics(gasConsumption, false)
 		if err != nil {
 			fmt.Printf("Error pushing gas consumption: %v\n", err)
 
