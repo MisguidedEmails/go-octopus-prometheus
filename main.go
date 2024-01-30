@@ -89,6 +89,47 @@ func pushMetrics(
 	return nil
 }
 
+type ingestType string
+
+const (
+	ingestTypeGas         ingestType = "gas"
+	ingestTypeElectricity ingestType = "electricity"
+)
+
+// Ingest data from Octopus API into Prometheus.
+func getConsumption(
+	ingest ingestType,
+	options octopus.ConsumptionRequest,
+) (consumption []octopus.Consumption, err error) {
+	client := octopus.NewClient(os.Getenv("OCTOPUS_TOKEN"))
+
+	switch ingest {
+	case ingestTypeGas:
+		consumption, err = client.GasConsumption(
+			os.Getenv("OCTOPUS_MPRN"),
+			os.Getenv("OCTOPUS_GAS_SERIAL"),
+			options,
+		)
+	case ingestTypeElectricity:
+		consumption, err = client.ElectricityConsumption(
+			os.Getenv("OCTOPUS_MPAN"),
+			os.Getenv("OCTOPUS_ELEC_SERIAL"),
+			options,
+		)
+	}
+
+	// TODO: beter handling
+	if err != nil {
+		return nil, err
+	}
+
+	if len(consumption) == 0 {
+		return nil, fmt.Errorf("No consumption found")
+	}
+
+	return consumption, nil
+}
+
 // TODO: Add backfill length option - how far back to backfill
 // TODO: Add frequency option - how frequent should the data be in prometheus
 // TODO: Pagination - max 25000 results per page, which is a full year of 30-min intervals
@@ -103,14 +144,18 @@ func cli(args []string) int {
 		return 1
 	}
 
+	toIngest := []ingestType{}
+
 	requiredVars := []string{"TOKEN", "PUSHGATEWAY"}
 
 	if *ingestGas {
 		requiredVars = append(requiredVars, []string{"MPRN", "GAS_SERIAL"}...)
+		toIngest = append(toIngest, ingestTypeGas)
 	}
 
 	if *ingestElec {
 		requiredVars = append(requiredVars, []string{"MPAN", "ELEC_SERIAL"}...)
+		toIngest = append(toIngest, ingestTypeElectricity)
 	}
 
 	var missingVars []string
@@ -129,68 +174,30 @@ func cli(args []string) int {
 		return 1
 	}
 
-	client := octopus.NewClient(os.Getenv("OCTOPUS_TOKEN"))
-
 	options := octopus.ConsumptionRequest{
 		PageSize: 25000,
 	}
 
-	if *ingestElec {
-		elecConsumption, err := client.ElectricityConsumption(
-			os.Getenv("OCTOPUS_MPAN"),
-			os.Getenv("OCTOPUS_ELEC_SERIAL"),
-			options,
-		)
+	for _, ingest := range toIngest {
+		consumption, err := getConsumption(ingest, options)
 		if err != nil {
 			fmt.Println(err)
 
 			return 1
 		}
 
-		if len(elecConsumption) == 0 {
-			fmt.Println("No electricity consumption found")
-
-			return 1
-		}
-
-		err = pushMetrics(elecConsumption, true)
+		err = pushMetrics(consumption, ingest == ingestTypeElectricity)
 		if err != nil {
-			fmt.Printf("Error pushing electricity consumption: %v\n", err)
+			fmt.Printf("Error pushing %v consumption: %v\n", ingest, err)
 
 			return 1
 		}
 
-		fmt.Println(
-			"Pushed elec usage to pushgateway, kWh:", elecConsumption[0].Consumption,
+		fmt.Printf(
+			"Pushed %v usage to pushgateway, kWh: %v\n",
+			ingest,
+			consumption[0].Consumption,
 		)
-	}
-
-	if *ingestGas {
-		gasConsumption, err := client.GasConsumption(
-			os.Getenv("OCTOPUS_MPRN"),
-			os.Getenv("OCTOPUS_GAS_SERIAL"),
-			options,
-		)
-		if err != nil {
-			fmt.Println(err)
-
-			return 1
-		}
-
-		if len(gasConsumption) == 0 {
-			fmt.Println("No gas consumption found")
-
-			return 1
-		}
-
-		err = pushMetrics(gasConsumption, false)
-		if err != nil {
-			fmt.Printf("Error pushing gas consumption: %v\n", err)
-
-			return 1
-		}
-
-		fmt.Println("Pushed gas usage to pushgateway, kWh:", gasConsumption[0].Consumption)
 	}
 
 	return 0
