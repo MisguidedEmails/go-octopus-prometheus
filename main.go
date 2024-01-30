@@ -3,8 +3,9 @@ package main
 import (
 	"flag"
 	"fmt"
-	"log"
+	// "log" // TODO: something better than fmt.print
 	"os"
+	"time"
 
 	"github.com/go-resty/resty/v2"
 	"github.com/gogo/protobuf/proto"
@@ -13,24 +14,31 @@ import (
 	"github.com/prometheus/prometheus/prompb"
 )
 
+type ingestType string
+
+const (
+	ingestTypeElectricity ingestType = "electricity"
+	ingestTypeGas         ingestType = "gas"
+)
+
 func pushMetrics(
 	metric []octopus.Consumption,
-	electricity bool,
+	ingest ingestType,
 ) error {
 	labels := []prompb.Label{}
-	if electricity {
+
+	switch ingest {
+	case ingestTypeElectricity:
 		labels = append(labels, prompb.Label{
 			Name:  "__name__",
 			Value: "octopus_consumption_electricity_kwh",
 		})
-	} else {
+	case ingestTypeGas:
 		labels = append(labels, prompb.Label{
 			Name:  "__name__",
 			Value: "octopus_consumption_gas_kwh",
 		})
 	}
-
-	log.Printf("Pushing %v metrics to pushgateway", len(metric))
 
 	// We can only get consumption in 30 minute intervals, so we need to
 	// report the same value for 30 minutes. Otherwise queries in-between
@@ -44,8 +52,17 @@ func pushMetrics(
 		SetHeader("Content-Encoding", "snappy").
 		SetHeader("User-Agent", "testing/1.1.1.")
 
+	fmt.Printf(
+		"Pushing %v %v metrics from %v to %v\n",
+		len(metric),
+		ingest,
+		metric[0].IntervalStart,
+		metric[len(metric)-1].IntervalEnd,
+	)
+
 	for _, m := range metric {
-		log.Printf("Pushing metric for %v, %vkwh", m.IntervalStart, m.Consumption)
+		// TODO: Debug only?
+		// fmt.Printf("Pushing metric for %v, %vkwh\n", m.IntervalStart, m.Consumption)
 		request := prompb.WriteRequest{
 			Timeseries: []prompb.TimeSeries{
 				{
@@ -89,13 +106,6 @@ func pushMetrics(
 	return nil
 }
 
-type ingestType string
-
-const (
-	ingestTypeGas         ingestType = "gas"
-	ingestTypeElectricity ingestType = "electricity"
-)
-
 // Ingest data from Octopus API into Prometheus.
 func getConsumption(
 	ingest ingestType,
@@ -123,19 +133,20 @@ func getConsumption(
 		return nil, err
 	}
 
-	if len(consumption) == 0 {
-		return nil, fmt.Errorf("No consumption found")
-	}
-
 	return consumption, nil
 }
 
-// TODO: Add backfill length option - how far back to backfill
 // TODO: Add frequency option - how frequent should the data be in prometheus
-// TODO: Pagination - max 25000 results per page, which is a full year of 30-min intervals
 func cli(args []string) int {
 	ingestGas := flag.Bool("gas", false, "Include gas consumption")
 	ingestElec := flag.Bool("electricity", false, "Include electricity consumption")
+	// TODO: Accept days/weeks. maybe accept date as an option too.
+	since := flag.Duration(
+		"since",
+		33*24*time.Hour,
+		"How long ago to ingest data for",
+	)
+
 	flag.Parse()
 
 	if !*ingestGas && !*ingestElec {
@@ -174,30 +185,47 @@ func cli(args []string) int {
 		return 1
 	}
 
+	sinceTime := time.Now().Add(-*since)
+	fmt.Printf("Backfilling from %v\n", sinceTime)
+
 	options := octopus.ConsumptionRequest{
-		PageSize: 25000,
+		PeriodFrom: sinceTime,
+		OrderBy:    "period", // Oldest first
+		PageSize:   1000,     // Around 3 weeks of data per page. Could go higher.
 	}
 
 	for _, ingest := range toIngest {
-		consumption, err := getConsumption(ingest, options)
-		if err != nil {
-			fmt.Println(err)
+		// Iterate over pages until we get to the end
+		for {
+			consumption, err := getConsumption(ingest, options)
+			if err != nil {
+				fmt.Println(err)
 
-			return 1
+				return 1
+			}
+
+			if len(consumption) == 0 {
+				fmt.Printf("No more %v consumption to ingest\n", ingest)
+
+				break
+			}
+
+			err = pushMetrics(consumption, ingest)
+			if err != nil {
+				fmt.Printf("Error pushing %v consumption: %v\n", ingest, err)
+
+				return 1
+			}
+
+			fmt.Printf(
+				"Pushed %v usage to pushgateway, kWh: %v\n",
+				ingest,
+				consumption[0].Consumption,
+			)
+
+			// Set the next page "sinceTime" to the last item in the current page
+			options.PeriodFrom = consumption[len(consumption)-1].IntervalEnd
 		}
-
-		err = pushMetrics(consumption, ingest == ingestTypeElectricity)
-		if err != nil {
-			fmt.Printf("Error pushing %v consumption: %v\n", ingest, err)
-
-			return 1
-		}
-
-		fmt.Printf(
-			"Pushed %v usage to pushgateway, kWh: %v\n",
-			ingest,
-			consumption[0].Consumption,
-		)
 	}
 
 	return 0
