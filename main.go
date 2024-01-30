@@ -52,6 +52,18 @@ func pushMetrics(
 		SetHeader("Content-Encoding", "snappy").
 		SetHeader("User-Agent", "testing/1.1.1.")
 
+	if os.Getenv("DEBUG") != "" {
+		// Yeah I get it, basic auth over HTTP is bad. cool thx.
+		client = client.SetDisableWarn(true)
+	}
+
+	if os.Getenv("OCTOPUS_PUSHGATEWAY_USER") != "" {
+		client = client.SetBasicAuth(
+			os.Getenv("OCTOPUS_PUSHGATEWAY_USER"),
+			os.Getenv("OCTOPUS_PUSHGATEWAY_PASS"),
+		)
+	}
+
 	fmt.Printf(
 		"Pushing %v %v metrics from %v to %v\n",
 		len(metric),
@@ -99,7 +111,11 @@ func pushMetrics(
 
 		// TODO: Proper error handling
 		if resp.StatusCode() != 204 {
-			return fmt.Errorf("Pushgateway returned non-204 status code: %v", resp.StatusCode())
+			return fmt.Errorf(
+				"Pushgateway returned non-204 status code %v: %v",
+				resp.StatusCode(),
+				resp.String(),
+			)
 		}
 	}
 
