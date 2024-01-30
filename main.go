@@ -29,15 +29,37 @@ func pushMetrics(
 
 	switch ingest {
 	case ingestTypeElectricity:
-		labels = append(labels, prompb.Label{
-			Name:  "__name__",
-			Value: "octopus_consumption_electricity_kwh",
-		})
+		labels = append(
+			labels,
+			prompb.Label{
+				Name:  "__name__",
+				Value: "octopus_consumption_electricity_kwh",
+			},
+			prompb.Label{
+				Name:  "mpan",
+				Value: os.Getenv("OCTOPUS_MPAN"),
+			},
+			prompb.Label{
+				Name:  "serial",
+				Value: os.Getenv("OCTOPUS_ELEC_SERIAL"),
+			},
+		)
 	case ingestTypeGas:
-		labels = append(labels, prompb.Label{
-			Name:  "__name__",
-			Value: "octopus_consumption_gas_kwh",
-		})
+		labels = append(
+			labels,
+			prompb.Label{
+				Name:  "__name__",
+				Value: "octopus_consumption_gas_kwh",
+			},
+			prompb.Label{
+				Name:  "mprn",
+				Value: os.Getenv("OCTOPUS_MPRN"),
+			},
+			prompb.Label{
+				Name:  "serial",
+				Value: os.Getenv("OCTOPUS_GAS_SERIAL"),
+			},
+		)
 	}
 
 	// We can only get consumption in 30 minute intervals, so we need to
