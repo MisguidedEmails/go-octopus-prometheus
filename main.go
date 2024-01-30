@@ -6,9 +6,9 @@ import (
 	"log"
 	"os"
 
-	"github.com/golang/snappy"
 	"github.com/go-resty/resty/v2"
 	"github.com/gogo/protobuf/proto"
+	"github.com/golang/snappy"
 	"github.com/misguidedemails/go-octopus-energy"
 	"github.com/prometheus/prometheus/prompb"
 )
@@ -20,12 +20,12 @@ func pushMetrics(
 	labels := []prompb.Label{}
 	if electricity {
 		labels = append(labels, prompb.Label{
-			Name: "__name__",
+			Name:  "__name__",
 			Value: "octopus_consumption_electricity_kwh",
 		})
 	} else {
 		labels = append(labels, prompb.Label{
-			Name: "__name__",
+			Name:  "__name__",
 			Value: "octopus_consumption_gas_kwh",
 		})
 	}
@@ -52,7 +52,7 @@ func pushMetrics(
 					Labels: labels,
 					Samples: []prompb.Sample{
 						{
-							Value: float64(m.Consumption),
+							Value:     float64(m.Consumption),
 							Timestamp: m.IntervalStart.UnixMilli(),
 						},
 					},
