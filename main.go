@@ -146,6 +146,11 @@ func cli(args []string) int {
 		33*24*time.Hour,
 		"How long ago to ingest data for",
 	)
+	fullBackfill := flag.Bool(
+		"full-backfill",
+		false,
+		"Backfill all available data. Overrides --since",
+	)
 
 	flag.Parse()
 
@@ -185,8 +190,15 @@ func cli(args []string) int {
 		return 1
 	}
 
-	sinceTime := time.Now().Add(-*since)
-	fmt.Printf("Backfilling from %v\n", sinceTime)
+	var sinceTime time.Time
+	if *fullBackfill {
+		sinceTime = time.Date(1972, 1, 1, 0, 0, 0, 0, time.UTC)
+
+		fmt.Println("Backfilling all available data")
+	} else {
+		sinceTime = time.Now().Add(-*since)
+		fmt.Printf("Backfilling from %v\n", sinceTime)
+	}
 
 	options := octopus.ConsumptionRequest{
 		PeriodFrom: sinceTime,
