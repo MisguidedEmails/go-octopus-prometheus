@@ -73,3 +73,4 @@ Prometheus:
   - Need to ensure that this does not present an inaccurate view of the data - maybe a different metric name
 - [ ] Add tests - simple integration tests to ensure pushing is functioning
 - [ ] Hand-holding Prometheus - e.g. resuming from where we left off last time, so prometheus doesn't get mad
+- [ ] Cleanup all code TODOs
