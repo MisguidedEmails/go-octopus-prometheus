@@ -1,5 +1,4 @@
-FROM gcr.io/distroless/base-debian10
-WORKDIR /
-COPY /octopus-prometheus .
+FROM gcr.io/distroless/static-debian12
+COPY octopus-prometheus /usr/bin/
 
-ENTRYPOINT ["/octopus-prometheus"]
+ENTRYPOINT ["/usr/bin/octopus-prometheus"]

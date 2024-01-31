@@ -1,7 +1,8 @@
 project_name: octopus-prometheus
 
 builds:
-- id: octopus-prometheus
+- env:
+  - CGO_ENABLED=0
   goos:
   - linux
   goarch:
@@ -9,6 +10,6 @@ builds:
 
 dockers:
 - image_templates:
-  - "{{.Env.IMAGE_ID}}:latest"
-  - "{{.Env.IMAGE_ID}}:{{.RawVersion}}"
-  - "{{.Env.IMAGE_ID}}:{{.Major}}.{{.Minor}}"
+  - "ghcr.io/misguidedemails/{{.ProjectName}}:latest"
+  - "ghcr.io/misguidedemails/{{.ProjectName}}:{{.RawVersion}}"
+  - "ghcr.io/misguidedemails/{{.ProjectName}}:{{.Major}}.{{.Minor}}"
