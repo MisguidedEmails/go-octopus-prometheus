@@ -13,12 +13,12 @@ You'll need to have the following environment variables set:
 - `OCTOPUS_ELEC_SERIAL`: Serial of the electricity meter
 - `OCTOPUS_MPRN`: For the gas meter
 - `OCTOPUS_GAS_SERIAL`: Serial of the gas meter
-- `OCTOPUS_PUSHGATEWAY`: Address to the pushgateway endpoint
+- `OCTOPUS_REMOTE_WRITE`: Address to the remote write endpoint
 
 If using basic auth for prometheus:
 
-- `OCTOPUS_PUSHGATEWAY_USER`
-- `OCTOPUS_PUSHGATEWAY_PASS`
+- `OCTOPUS_REMOTE_WRITE_USER`
+- `OCTOPUS_REMOTE_WRITE_PASS`
 
 ### CLI
 

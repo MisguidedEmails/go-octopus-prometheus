@@ -79,10 +79,10 @@ func pushMetrics(
 		client = client.SetDisableWarn(true)
 	}
 
-	if os.Getenv("OCTOPUS_PUSHGATEWAY_USER") != "" {
+	if os.Getenv("OCTOPUS_REMOTE_WRITE_USER") != "" {
 		client = client.SetBasicAuth(
-			os.Getenv("OCTOPUS_PUSHGATEWAY_USER"),
-			os.Getenv("OCTOPUS_PUSHGATEWAY_PASS"),
+			os.Getenv("OCTOPUS_REMOTE_WRITE_USER"),
+			os.Getenv("OCTOPUS_REMOTE_WRITE_PASS"),
 		)
 	}
 
@@ -120,7 +120,7 @@ func pushMetrics(
 
 		resp, err := client.R().
 			SetBody(snappySerial).
-			Post(os.Getenv("OCTOPUS_PUSHGATEWAY"))
+			Post(os.Getenv("OCTOPUS_REMOTE_WRITE"))
 		if err != nil {
 			return err
 		}
@@ -134,7 +134,7 @@ func pushMetrics(
 		// TODO: Proper error handling
 		if resp.StatusCode() != 204 {
 			return fmt.Errorf(
-				"Pushgateway returned non-204 status code %v: %v",
+				"Remote Write returned non-204 status code %v: %v",
 				resp.StatusCode(),
 				resp.String(),
 			)
@@ -200,7 +200,7 @@ func cli(args []string) int {
 
 	toIngest := []ingestType{}
 
-	requiredVars := []string{"TOKEN", "PUSHGATEWAY"}
+	requiredVars := []string{"TOKEN", "REMOTE_WRITE"}
 
 	if *ingestGas {
 		requiredVars = append(requiredVars, []string{"MPRN", "GAS_SERIAL"}...)
@@ -268,7 +268,7 @@ func cli(args []string) int {
 			}
 
 			fmt.Printf(
-				"Pushed %v usage to pushgateway, kWh: %v\n",
+				"Pushed %v usage to remote write, kWh: %v\n",
 				ingest,
 				consumption[0].Consumption,
 			)
