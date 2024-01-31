@@ -1,4 +1,4 @@
-module github.com/misguidedemails/go-octopus-prometheus
+module github.com/misguidedemails/octopus-prometheus
 
 go 1.21
 

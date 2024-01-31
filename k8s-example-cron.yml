@@ -1,10 +1,9 @@
-apiVersion: batch/v1beta1
+apiVersion: batch/v1
 kind: CronJob
 metadata:
   name: octopus
 spec:
-  # Run on 1 and 31 minutes passed
-  schedule: "31,1 * * * *"
+  schedule: "@daily"
   concurrencyPolicy: Forbid
   jobTemplate:
     spec:
@@ -14,13 +13,16 @@ spec:
           containers:
             - name: octopus
               image: ghcr.io/misguidedemails/octopus-prometheus:0.1
-              imagePullPolicy: Always
+              args:
+                - "--gas"
+                - "--electricity"
+                - "--since 72h" # 3 days
               env:
               - name: OCTOPUS_TOKEN
                 valueFrom:
                   secretKeyRef:
                     name: octopus
-                    key: octopus
+                    key: token
               envFrom:
               - configMapRef:
                   name: octopus
@@ -34,4 +36,6 @@ data:
   OCTOPUS_ELEC_SERIAL: "ELEC SERIAL"
   OCTOPUS_MPRN: "GAS MPRN"
   OCTOPUS_GAS_SERIAL: "GAS SERIAL"
-  OCTOPUS_PUSHGATEWAY: "pushgateway-prometheus-pushgateway.monitoring:9091"
+  OCTOPUS_PUSHGATEWAY: "victoria-metrics-auth.monitoring:8427"
+  OCTOPUS_PUSHGATEWAY_USER: "yeah"
+  OCTOPUS_PUSHGATEWAY_PASS: "yea"
