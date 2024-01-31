@@ -1,0 +1,45 @@
+version: '3'
+
+services:
+  victoria-metrics:
+    image: docker.io/victoriametrics/victoria-metrics
+    command:
+      - "-retentionPeriod=99y"
+    ports:
+      - 8428:8428
+    networks:
+      - the-network
+
+  victoria-metrics-auth:
+    image: docker.io/victoriametrics/vmauth
+    command:
+    - "-auth.config=/vm-auth.yaml"
+    ports:
+      - 8427:8427
+    networks:
+      - the-network
+    configs:
+      - source: vm-auth
+        target: /vm-auth.yaml
+
+  prometheus:
+    image: docker.io/prom/prometheus
+    command:
+      - "--web.enable-remote-write-receiver"
+      - "--storage.tsdb.retention.time=99y"
+    ports:
+      - 9090:9090
+    networks:
+      - the-network
+    configs:
+      - source: prometheus
+        target: /prometheus/prometheus.yml
+
+networks:
+  the-network:
+
+configs:
+  prometheus:
+    file: ./dev/prometheus.yaml
+  vm-auth:
+    file: ./dev/vm-auth.yaml

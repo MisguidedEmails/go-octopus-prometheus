@@ -1,0 +1,17 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+# Experimental feature - though it's more or less required for this. 24 hours (the
+# default) is too short as it's possible to have no data for a 24 hour period.
+storage:
+  tsdb:
+    # Interestingly when this is lower (34d or so) prometheus will temporarily accept
+    # years old data, then decide part way through a `--full-backfill` that, actually,
+    # it's had enough and the data is too old then returns a "500: too old sample".
+    out_of_order_time_window: "99y"

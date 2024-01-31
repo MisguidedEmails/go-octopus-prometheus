@@ -1,0 +1,7 @@
+users:
+- username: yeehaw
+  password: 🤠
+  url_prefix: http://victoria-metrics:8428
+- username: yeehaw-prometheus
+  password: 🤠
+  url_prefix: http://prometheus:9090
