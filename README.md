@@ -15,6 +15,8 @@ You'll need to have the following environment variables set:
 - `OCTOPUS_GAS_SERIAL`: Serial of the gas meter
 - `OCTOPUS_REMOTE_WRITE`: Address to the remote write endpoint
 
+Token, and meter details can be found in the [Octopus Energy dev dashboard](https://octopus.energy/dashboard/developer/).
+
 If using basic auth for prometheus:
 
 - `OCTOPUS_REMOTE_WRITE_USER`
